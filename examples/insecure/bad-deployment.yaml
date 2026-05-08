@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: insecure-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: insecure-demo
+  template:
+    metadata:
+      labels:
+        app: insecure-demo
+    spec:
+      containers:
+        - name: api
+          image: nginx:latest
+          securityContext:
+            privileged: true
