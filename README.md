@@ -173,5 +173,3 @@ Good next steps:
 ## Suggested Resume Bullet
 
 Designed a prototype AI-powered DevSecOps workflow integrating CI/CD, Kubernetes, Terraform, policy-based compliance scanning, and automated risk reporting to shift security left, reduce deployment risk, and standardize cloud operations across teams.
-
-Updated repository after resolving merge conflict.
