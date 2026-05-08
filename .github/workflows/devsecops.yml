@@ -152,7 +152,7 @@ jobs:
             --network zapnet \
             -v ${{ github.workspace }}/reports:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://ai-devsecops-demo:8000 -r /zap/wrk/zap-report.html -I || true
+            zap-baseline.py -t http://ai-devsecops-demo:8000 -r zap-report.html -I || true
       - name: Upload ZAP report
         uses: actions/upload-artifact@v4
         with:
