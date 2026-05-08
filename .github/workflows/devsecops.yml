@@ -58,22 +58,22 @@ jobs:
           bandit -r src -f json -o reports/sast-report.json || true
           bandit -r src -f txt -o reports/sast-report.txt || true
       - name: Fail on HIGH+HIGH Bandit findings
-        run: |
+        run: >
           python - <<'PY'
-import json,sys,os
-p='reports/sast-report.json'
-if not os.path.exists(p):
-    print('Bandit JSON report missing; skipping hard-fail')
-    sys.exit(0)
-j=json.load(open(p))
-issues=j.get('results',[])
-for i in issues:
-    if i.get('issue_severity','').upper()=='HIGH' and i.get('issue_confidence','').upper()=='HIGH':
-        print('High severity+confidence issue found:', i.get('test_name'))
-        sys.exit(1)
-print('No high severity+confidence Bandit issues')
-sys.exit(0)
-PY
+          import json,sys,os
+          p='reports/sast-report.json'
+          if not os.path.exists(p):
+              print('Bandit JSON report missing; skipping hard-fail')
+              sys.exit(0)
+          j=json.load(open(p))
+          issues=j.get('results',[])
+          for i in issues:
+              if i.get('issue_severity','').upper()=='HIGH' and i.get('issue_confidence','').upper()=='HIGH':
+                  print('High severity+confidence issue found:', i.get('test_name'))
+                  sys.exit(1)
+          print('No high severity+confidence Bandit issues')
+          sys.exit(0)
+          PY
       - name: Upload SAST report
         uses: actions/upload-artifact@v4
         with:
@@ -97,7 +97,7 @@ PY
         uses: aquasecurity/trivy-action@v0.12.0
         with:
           scan-type: fs
-          path: .
+          scan-path: "."
           output: reports/sca-report.txt
           format: table
       - name: Upload SCA report
