@@ -1,11 +1,27 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from datetime import datetime, timezone
 
 app = FastAPI(title="AI DevSecOps Demo API", version="1.0.0")
 
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    return response
+
 class PromptRequest(BaseModel):
     prompt: str
+
+@app.get("/")
+def root():
+    return {"message": "AI DevSecOps Demo API", "status": "ok"}
 
 @app.get("/health")
 def health():

@@ -1,7 +1,10 @@
 .venv/
 __pycache__/
 .pytest_cache/
-reports/
+# Keep generated markdown report but ignore bulky artifacts
+reports/*.html
+reports/*.yaml
+reports/*.yml
 *.pyc
 .env
 terraform/.terraform/

@@ -1,5 +1,8 @@
 # AI-Powered DevSecOps Starter Platform 🚀
 
+Updated: this branch adds CI steps (SAST, SCA, DAST) and consolidated reporting. See `ai-devsecops-starter/devsecops-workflow.yml` for the workflow content to place under `.github/workflows/devsecops.yml`.
+
+
 This repo is a ground-up starter project that demonstrates a unified DevSecOps workflow from planning to production.
 
 It includes:
