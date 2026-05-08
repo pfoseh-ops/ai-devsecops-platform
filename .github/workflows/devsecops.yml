@@ -100,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
       - name: Build with Docker Compose
         run: |
           docker compose build --no-cache
@@ -123,40 +123,46 @@ jobs:
         working-directory: .
     steps:
       - uses: actions/checkout@v4
-      - name: Start app with docker compose
-        run: |
-          docker compose up -d --build
-      - name: Wait for health endpoint
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build Docker image
         run: |
           mkdir -p reports
-          # Try localhost first, then host.docker.internal
+          docker build -t ai-devsecops-demo:ci .
+      - name: Create docker network
+        run: |
+          docker network create zapnet || true
+      - name: Run app container on zapnet (published to localhost:8000)
+        run: |
+          docker run -d --name ai-devsecops-demo --network zapnet -p 8000:8000 ai-devsecops-demo:ci
+      - name: Wait for health endpoint (localhost)
+        run: |
           for i in {1..30}; do
             if curl -sSf http://localhost:8000/health -o /dev/null; then
-              echo "SCAN_TARGET=http://localhost:8000" >> $GITHUB_ENV
-              break
-            fi
-            if curl -sSf http://host.docker.internal:8000/health -o /dev/null; then
-              echo "SCAN_TARGET=http://host.docker.internal:8000" >> $GITHUB_ENV
-              break
+              echo "Service healthy"
+              exit 0
             fi
             sleep 2
           done
-          if [ -z "$SCAN_TARGET" ]; then
-            echo "App health check failed" >&2
-            exit 1
-          fi
-      - name: Run OWASP ZAP baseline
+          echo "App health check failed" >&2
+          exit 1
+      - name: Run OWASP ZAP (container on zapnet)
         run: |
-          docker run --rm -v ${{ github.workspace }}/reports:/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py -t $SCAN_TARGET -r /zap/wrk/zap-report.html -I || true
+          docker run --rm \
+            --network zapnet \
+            -v ${{ github.workspace }}/reports:/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://ai-devsecops-demo:8000 -r /zap/wrk/zap-report.html -I || true
       - name: Upload ZAP report
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
           path: reports/zap-report.html
-      - name: Stop app
+      - name: Stop app and remove network
         if: always()
         run: |
-          docker compose down
+          docker rm -f ai-devsecops-demo || true
+          docker network rm zapnet || true
 
   report:
     name: Generate combined report
