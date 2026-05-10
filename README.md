@@ -1,22 +1,34 @@
 # AI-Powered DevSecOps Starter Platform 🚀
 
-Updated: this branch adds CI steps (SAST, SCA, DAST) and consolidated reporting. See `ai-devsecops-starter/devsecops-workflow.yml` for the workflow content to place under `.github/workflows/devsecops.yml`.
 
 
-This repo is a ground-up starter project that demonstrates a unified DevSecOps workflow from planning to production.
 
-It includes:
+A production-style DevSecOps platform demonstrating automated security testing, CI/CD orchestration, containerized application delivery, Infrastructure-as-Code validation, and consolidated security reporting across the software delivery lifecycle.
 
-- A small FastAPI service
-- Docker build support
-- Automated tests
-- AI-style security/compliance scanner
-- Terraform examples
-- Kubernetes manifests
-- GitHub Actions CI/CD workflow
-- Automated DevSecOps report generation
+## Key Capabilities
 
-The scanner works without paid AI APIs. It uses deterministic rules first, then you can optionally plug in an LLM later.
+- FastAPI application with hardened security headers
+- Dockerized application deployment
+- GitHub Actions CI/CD pipeline
+- Automated unit testing with Pytest
+- SAST scanning with Bandit
+- SCA and IaC scanning with Trivy
+- DAST scanning with OWASP ZAP
+- Terraform infrastructure examples
+- Kubernetes deployment manifests
+- Consolidated DevSecOps report generation
+- Automated artifact publishing in GitHub Actions
+
+The platform uses deterministic policy and rule-based scanning by default and can optionally be extended with LLM-powered analysis in future iterations.
+
+## Security Controls
+
+- X-Content-Type-Options
+- X-Frame-Options
+- Referrer-Policy
+- Permissions-Policy
+- Cross-Origin-Resource-Policy
+- Cache-Control
 
 ---
 
@@ -25,13 +37,21 @@ The scanner works without paid AI APIs. It uses deterministic rules first, then 
 ```text
 Developer Push
    ↓
-GitHub Actions
+GitHub Actions CI/CD
    ↓
-Test → Security Scan → Compliance Scan → Build Docker Image
+Unit Tests
    ↓
-Generate DevSecOps Report
+SAST (Bandit)
    ↓
-Deploy-ready Kubernetes/Terraform artifacts
+SCA & IaC Scan (Trivy)
+   ↓
+Docker Build Validation
+   ↓
+DAST (OWASP ZAP)
+   ↓
+Generate Security Reports & Artifacts
+   ↓
+Deploy-ready Kubernetes/Terraform Assets
 ```
 
 ---
@@ -136,11 +156,14 @@ The workflow is located here:
 
 It runs:
 
-1. Python dependency install
-2. Unit tests
-3. DevSecOps scan
-4. Docker build
-5. Report artifact upload
+1. Python dependency installation
+2. Unit testing
+3. SAST with Bandit
+4. SCA and IaC scanning with Trivy
+5. Docker image build validation
+6. DAST with OWASP ZAP
+7. Consolidated report generation
+8. Artifact publishing
 
 ---
 
@@ -158,21 +181,22 @@ It runs:
 
 ---
 
-## Next Enhancements
+## Future Enhancements
 
-Good next steps:
+Planned improvements:
 
-- Add OpenAI/Azure OpenAI explanation layer
-- Add Checkov or tfsec
-- Add Trivy image scanning
-- Add Argo CD app manifests
-- Push Docker image to AWS ECR
-- Deploy to EKS
-- Add Prometheus/Grafana dashboards
-- Add cost optimization recommendations
+- Checkov/tfsec
+- Trivy image scanning
+- SBOM generation with Syft/CycloneDX
+- Argo CD GitOps manifests
+- Automated container publishing to AWS ECR
+- Amazon EKS deployment automation
+- Prometheus/Grafana
+- OPA/Kyverno
+- OpenAI/Azure OpenAI explanation layer
 
 ---
 
 ## Suggested Resume Bullet
 
-Designed a prototype AI-powered DevSecOps workflow integrating CI/CD, Kubernetes, Terraform, policy-based compliance scanning, and automated risk reporting to shift security left, reduce deployment risk, and standardize cloud operations across teams.
+Designed and implemented a production-style DevSecOps platform integrating GitHub Actions CI/CD, SAST, SCA, DAST, Docker, Kubernetes, Terraform, and automated security reporting to shift security left and standardize secure delivery workflows.
