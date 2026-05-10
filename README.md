@@ -61,7 +61,7 @@ Deploy-ready Kubernetes/Terraform Assets
 ### 1. Clone repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ai-devsecops-starter.git
+git clone https://github.com/pfoseh-ops/ai-devsecops-starter.git
 cd ai-devsecops-starter
 ```
 
