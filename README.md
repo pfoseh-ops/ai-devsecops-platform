@@ -91,6 +91,12 @@ Open:
 http://localhost:8000/health
 ```
 
+Swagger API Docs:
+
+```text
+http://localhost:8000/docs
+```
+
 ---
 
 ## Run With Docker
@@ -103,6 +109,12 @@ Open:
 
 ```text
 http://localhost:8000/health
+```
+
+Swagger API Docs:
+
+```text
+http://localhost:8000/docs
 ```
 
 ---
