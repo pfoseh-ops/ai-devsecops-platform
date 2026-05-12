@@ -11,7 +11,14 @@ out.append('# DevSecOps Consolidated Report\n')
 test_file = REPORTS / 'test-report.txt'
 if test_file.exists():
     out.append('## Test Results\n')
-    out.append('```\n' + test_file.read_text() + '\n```\n')
+    try:
+        text = test_file.read_text(encoding='utf-8')
+    except UnicodeDecodeError:
+        try:
+            text = test_file.read_text(encoding='utf-16')
+        except UnicodeDecodeError:
+            text = test_file.read_bytes().decode('latin-1', errors='replace')
+    out.append('```\n' + text + '\n```\n')
 else:
     out.append('## Test Results\nNo test report found.\n')
 
