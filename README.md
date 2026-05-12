@@ -131,7 +131,7 @@ reports/devsecops-report.md
 
 ## Demo a Failed Compliance Scan
 
-This repo includes intentionally bad examples under `examples/insecure/`.
+This repo includes intentionally vulnerable examples under `examples/insecure/` for demonstrating DevSecOps scanning, policy enforcement, and remediation workflows.
 
 ```bash
 python -m src.ai_guard.scan --target examples/insecure --output reports/insecure-report.md --fail-on high
