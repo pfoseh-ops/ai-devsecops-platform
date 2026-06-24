@@ -209,6 +209,9 @@ Planned improvements:
 
 ---
 
-## Suggested Resume Bullet
+## Author
 
-Designed and implemented a production-style DevSecOps platform integrating GitHub Actions CI/CD, SAST, SCA, DAST, Docker, Kubernetes, Terraform, and automated security reporting to shift security left and standardize secure delivery workflows.
+**Paul Foseh**
+
+Senior DevOps & Cloud Engineer | Infrastructure as Code | CI/CD Automation | Kubernetes & Platform Engineering
+
