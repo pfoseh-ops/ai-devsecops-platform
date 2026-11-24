@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pytest
 
 from src.ai_guard.scan import scan_kubernetes, scan_terraform
 
@@ -159,4 +158,4 @@ resource "aws_s3_bucket_public_access_block" "good_block" {
     rules = {f.rule for f in findings}
     # Only the S3 public access check should not trigger because public access block exists
     assert not any(r.startswith("IAM-") for r in rules)
-    assert not ("TF-AWS-S3-001" in rules)
+    assert "TF-AWS-S3-001" not in rules

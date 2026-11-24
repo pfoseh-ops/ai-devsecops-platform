@@ -1,0 +1,16 @@
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+  skip-dirs:
+    - .git
+    - .venv
+    - .pytest_cache
+    - .ruff_cache
+    - reports
+    - examples/insecure
+    - terraform/.terraform
+rego:
+  data:
+    - security/trivy-data

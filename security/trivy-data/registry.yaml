@@ -1,0 +1,6 @@
+# KSV0125 only evaluates the hostname (with suffix matching), not namespaces.
+# tests/test_production_controls.py additionally enforces the exact owner prefix.
+# These are static policies, not cluster admission enforcement.
+ksv0125:
+  trusted_registries:
+    - ghcr.io

@@ -3,6 +3,10 @@
 
 name: DevSecOps Pipeline
 
+# Validation only: no deployment credentials or registry write permissions.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main, master ]
@@ -31,6 +35,10 @@ jobs:
           mkdir -p reports
           set -o pipefail
           pytest -q | tee reports/test-report.txt
+      - name: Lint Python
+        run: python -m ruff check src scripts tests
+      - name: Audit Python dependencies
+        run: python -m pip_audit -r requirements.txt -r requirements-dev.txt
       - name: Upload test report
         uses: actions/upload-artifact@v7
         with:
@@ -56,8 +64,8 @@ jobs:
       - name: Run Bandit (output json+txt)
         run: |
           mkdir -p reports
-          python -m bandit -r src -f json -o reports/sast-report.json --exit-zero
-          python -m bandit -r src -f txt -o reports/sast-report.txt --exit-zero
+          python -m bandit -r src scripts -f json -o reports/sast-report.json --exit-zero
+          python -m bandit -r src scripts -f txt -o reports/sast-report.txt --exit-zero
           test -s reports/sast-report.json
           test -s reports/sast-report.txt
       - name: Fail on HIGH+HIGH Bandit findings
@@ -114,6 +122,9 @@ jobs:
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
+          trivy-config: trivy.yaml
+          scanners: vuln,misconfig,secret
           scan-type: fs
           scan-ref: "."
           output: reports/sca-report.txt
@@ -169,7 +180,7 @@ jobs:
           docker network create zapnet || true
       - name: Run app container on zapnet (published to localhost:8000)
         run: |
-          docker run -d --name ai-devsecops-demo --network zapnet -p 8000:8000 ai-devsecops-demo:ci
+          docker run -d --name ai-devsecops-demo --network zapnet -p 127.0.0.1:8000:8000 ai-devsecops-demo:ci
       - name: Wait for health endpoint (localhost)
         run: |
           for i in {1..30}; do
@@ -189,12 +200,14 @@ jobs:
             --network zapnet \
             -v ${{ github.workspace }}/reports:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://ai-devsecops-demo:8000 -r zap-report.html -w zap.md -I || true
+            zap-baseline.py -t http://ai-devsecops-demo:8000 -r zap-report.html -w zap.md -I
       - name: Upload ZAP report
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: zap-report
           path: reports/zap-report.html
+          if-no-files-found: error
       - name: Stop app and remove network
         if: always()
         run: |

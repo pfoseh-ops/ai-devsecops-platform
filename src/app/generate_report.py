@@ -27,8 +27,8 @@ sca_file = REPORTS / 'sca-report.txt'
 if sca_file.exists():
     sca_text = sca_file.read_text()
     out.append('## SCA (Trivy) Summary\n')
-    high = sum(1 for l in sca_text.splitlines() if 'CRITICAL' in l or 'HIGH' in l)
-    out.append(f'- High/Critical findings: {high}\n')
+    high = sum(1 for line in sca_text.splitlines() if 'CRITICAL' in line or 'HIGH' in line)
+    out.append(f'- Lines mentioning HIGH/CRITICAL (not a unique vulnerability count): {high}\n')
     out.append('```\n' + sca_text + '\n```\n')
 else:
     out.append('## SCA (Trivy) Summary\nNo SCA report found.\n')
@@ -38,7 +38,7 @@ sast_file = REPORTS / 'sast-report.txt'
 if sast_file.exists():
     sast_text = sast_file.read_text()
     out.append('## SAST (Bandit) Summary\n')
-    high = sum(1 for l in sast_text.splitlines() if 'HIGH' in l or 'High' in l)
+    high = sum(1 for line in sast_text.splitlines() if 'HIGH' in line or 'High' in line)
     out.append(f'- High findings lines: {high}\n')
     out.append('```\n' + sast_text + '\n```\n')
 else:
@@ -52,17 +52,13 @@ if zap_file.exists():
 else:
     out.append('## DAST (OWASP ZAP) Summary\nNo ZAP report found.\n')
 
-# Final risk summary (very basic)
+# Report completion is not release approval. Text matches are not CVE counts.
 out.append('## Final Risk Summary\n')
-risks = 0
-if sca_file.exists():
-    risks += high
-if sast_file.exists():
-    risks += sum(1 for l in sast_text.splitlines() if 'HIGH' in l or 'High' in l)
-if risks == 0:
-    out.append('No major issues detected by automated scanners. Manual review recommended.\n')
-else:
-    out.append(f'Automated scanners reported {risks} potential high-risk findings. Prioritize remediation.\n')
+out.append(
+    '**Production readiness: NO GO.** Scanner text summaries are not release approval. '
+    'Five SQLite/OpenSSL CVE dispositions and deployment controls remain unverified. '
+    'Review docs/sqlite-openssl-dispositions.md and docs/production-readiness.md.\n'
+)
 
 dev_file = REPORTS / 'devsecops-report.md'
 with open(dev_file, 'w', encoding='utf-8') as f:

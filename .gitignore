@@ -1,11 +1,30 @@
 .venv/
 __pycache__/
 .pytest_cache/
-# Keep generated markdown report but ignore bulky artifacts
+# Reports contain local evidence, raw scan output and generated artifacts.
+/reports/
+venv/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+# Legacy patterns retained for nested artifacts.
 reports/*.html
 reports/*.yaml
 reports/*.yml
 *.pyc
 .env
+.env.*
+.aws/
+*.pem
+*.key
+*.p12
+*.pfx
+terraform/*.tfvars
+terraform/*.tfvars.json
+terraform/*.tfplan
+reports/trivy-cache/
+reports/*.tar
 terraform/.terraform/
 terraform/*.tfstate*
+reports/image-test-tools/

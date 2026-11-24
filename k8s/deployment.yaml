@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ai-devsecops-demo
+  namespace: ai-devsecops
   labels:
     app: ai-devsecops-demo
 spec:
@@ -14,14 +15,31 @@ spec:
       labels:
         app: ai-devsecops-demo
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api
-          image: ghcr.io/YOUR_USERNAME/ai-devsecops-demo:v1.0.0
+          # Release blocker: replace this marker with a tested sha256 digest.
+          image: ghcr.io/pfoseh-ops/ai-devsecops-platform:REPLACE_WITH_RELEASE_TAG
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-devsecops-api
+                  key: api-key
           ports:
             - containerPort: 8000
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: 10001
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
@@ -49,6 +67,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ai-devsecops-demo
+  namespace: ai-devsecops
 spec:
   selector:
     app: ai-devsecops-demo

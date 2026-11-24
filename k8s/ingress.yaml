@@ -1,0 +1,24 @@
+# Template only: replace the class/hostname, provision TLS, and configure the
+# existing gateway's auth, redirect, logging, and quota settings BEFORE applying.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-devsecops-api
+  namespace: ai-devsecops
+spec:
+  ingressClassName: replace-with-approved-gateway
+  tls:
+    - hosts:
+        - api.example.invalid
+      secretName: ai-devsecops-tls
+  rules:
+    - host: api.example.invalid
+      http:
+        paths:
+          - path: /analyze
+            pathType: Exact
+            backend:
+              service:
+                name: ai-devsecops-demo
+                port:
+                  number: 80

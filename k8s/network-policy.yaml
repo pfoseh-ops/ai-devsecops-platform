@@ -1,0 +1,25 @@
+# Match these namespace and pod labels to the EXISTING approved gateway.
+# Requires a CNI that enforces NetworkPolicy; no ingress controller is installed here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-only
+  namespace: ai-devsecops
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-devsecops-demo
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: replace-with-gateway-namespace
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: replace-with-gateway-name
+      ports:
+        - protocol: TCP
+          port: 8000
+  # The analyzer is stateless/offline; it does not call AWS or resolve DNS.
+  egress: []

@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 from src.app.main import app
 
@@ -14,8 +13,9 @@ def test_analyze_known_prompt():
     data = r.json()
 
     # required fields
-    for key in ("input", "risk", "score", "signals", "recommendation"):
+    for key in ("risk", "score", "signals", "recommendation"):
         assert key in data, f"Missing field: {key}"
+    assert "input" not in data
 
     # types and values
     assert isinstance(data["score"], int)

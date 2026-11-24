@@ -1,4 +1,4 @@
-1# Copilot instructions for ai-devsecops-starter
+# Copilot instructions for ai-devsecops-starter
 
 Purpose: quick, actionable guidance for Copilot sessions interacting with this repository.
 
@@ -33,7 +33,7 @@ Purpose: quick, actionable guidance for Copilot sessions interacting with this r
 
 - A small FastAPI service (src/app) exposing:
   - GET /health — returns status, service name, timestamp
-  - POST /analyze — demo analyzer that scans a text prompt for risk keywords and returns structured JSON (input, risk, signals, recommendation)
+  - POST /analyze: demo analyzer returning risk, score, signals, frameworks, recommendation; never echoes the prompt.
 
 - DevSecOps scanner (src/ai_guard/scan.py): deterministic, rule-based scans across Terraform (.tf), Kubernetes (.yaml/.yml), and Dockerfile artifacts. Produces a Markdown report to reports/*.md and can exit non-zero when findings meet `--fail-on` threshold.
 
@@ -71,7 +71,11 @@ Purpose: quick, actionable guidance for Copilot sessions interacting with this r
 
 - API contract expectations (tests rely on this):
   - /health returns JSON with status == "healthy"
-  - /analyze accepts {"prompt": "..."} and returns keys: input, risk ("low"|"high"), signals (list), recommendation
+  - /analyze accepts a nonblank string prompt (maximum 10,000 characters before trimming).
+  - Returns risk (low|medium|high), score, signals, frameworks, recommendation; input was removed in API 1.1.
+  - Validation errors return 422 with loc/msg/type only, never submitted values.
+  - ENVIRONMENT=production requires API_KEY (32+ bytes); X-API-Key protects analysis. Local mode remains anonymous by default.
+  - Run python -m ruff check src tests and python -m pip_audit -r requirements.txt -r requirements-dev.txt in addition to pytest and Bandit.
 
 - Reports and artifacts:
   - Reports written to reports/*.md (created if missing). CI uploads reports/devsecops-report.md
