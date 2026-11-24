@@ -44,6 +44,13 @@ if sast_file.exists():
 else:
     out.append('## SAST (Bandit) Summary\nNo SAST report found.\n')
 
+# Runtime image evidence
+image_summary = REPORTS / 'runtime-image-summary.md'
+if image_summary.exists():
+    out.append(image_summary.read_text(encoding='utf-8'))
+else:
+    out.append('## Runtime image scan and SBOM\nNo runtime image evidence found.\n')
+
 # DAST
 zap_file = REPORTS / 'zap-report.html'
 if zap_file.exists():

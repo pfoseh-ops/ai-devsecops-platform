@@ -48,7 +48,8 @@ flowchart TD
     trigger --> sast[Bandit]
     trigger --> sca[Trivy filesystem scan]
     trigger --> build[Local image build on CI runner]
-    build --> dast[Temporary app and ZAP baseline scan]
+    build --> image[Build ZAP runtime image, Trivy image scan and CycloneDX SBOM]
+    image --> dast[Temporary scanned app and ZAP baseline scan]
     tests --> report[Combined report and CI artifacts]
     sast --> report
     sca --> report
@@ -485,14 +486,27 @@ The workflow performs:
 3. SAST with Bandit
 4. SCA and IaC scanning with Trivy
 5. Docker image build validation
-6. DAST with OWASP ZAP
+6. Runtime image vulnerability scanning, CycloneDX SBOM generation and DAST with OWASP ZAP
 7. Consolidated report generation
 8. Uploads of test/security reports as GitHub Actions artifacts
 
-The Trivy job scans the **filesystem**, not the built runtime image. Local image
-scanning and SBOM generation are described below; automating them in CI remains
-future work. The Trivy job is report-producing, so success does not mean zero
-findings. ZAP tests a temporary runner-local service and permits warning-level
+The SCA job scans the **filesystem**. The runtime/ZAP job additionally scans the
+exact final image archive with Trivy 0.76.2 and converts that result into a CycloneDX
+SBOM before starting the same image for ZAP. It verifies the scanned layer list and
+platform against the built image and records the source commit, image/configuration
+identities, database timestamps, package inventory, occurrence/unique-ID counts and
+evidence hashes. Missing or inconsistent evidence and scanner/tool failures fail CI.
+
+Download `runtime-image-security` from the workflow's artifacts for the JSON scan,
+CycloneDX SBOM, identity, summary and scanner/database metadata (14-day retention).
+The image archive is not uploaded and no image is pushed to a registry. The summary
+also appears in the job summary and combined report. The runtime scan covers OS
+and application dependency vulnerabilities; repository secret scanning remains in
+the filesystem job. Neither scan replaces manual advisory review.
+
+Both Trivy scans are report-producing, so success does not mean zero findings or
+production approval; unfixed findings and all severities remain included.
+ZAP tests a temporary runner-local service and permits warning-level
 findings with `-I`; scan failures are not blanket-ignored. The combined report
 retains **NO GO** even when all validation jobs pass.
 
@@ -545,7 +559,8 @@ Changing a base or dependency can invalidate earlier evidence.
 
 These options are not implemented or approved commitments:
 
-- Automate runtime image scans and CycloneDX SBOM generation in CI; both have been run locally.
+- Define an owner-approved image release policy and build provenance/signature verification;
+  runtime scanning and CycloneDX SBOM generation are now automated in CI.
 - Evaluate additional IaC analysis if it fills a documented gap in the existing checks.
 - Consider Argo CD, ECR image publishing or EKS deployment automation only after
   architecture review and separate publication/deployment authorization.

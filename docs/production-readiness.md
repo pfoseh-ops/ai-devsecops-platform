@@ -22,6 +22,14 @@ source/image identity. A passing command is evidence for its stated scope only.
 
 ## Package contents and current evidence
 
+CI now creates a `runtime-image-security` artifact containing a full runtime
+vulnerability scan, CycloneDX SBOM, image/configuration identities, source commit,
+scanner/database metadata, hashes and a NO GO summary. It checks scanned/built
+layers and platform and runs ZAP against the same image. Artifacts expire after
+14 days; preserve approved evidence externally when required. The image archive
+is not uploaded or pushed. These report-producing checks do not close the five
+manual CVE reviews or authorize a release.
+
 - [Deployment and rotation runbook](../README.md#production-deployment-procedure-not-executed).
 - [Read-only release input check](../scripts/check_release_inputs.py): blocks unresolved
   markers and images without a digest; it does not verify provenance or approval.

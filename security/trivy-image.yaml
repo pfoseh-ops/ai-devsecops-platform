@@ -1,0 +1,7 @@
+# Separate from filesystem exclusions: inventory the entire final runtime image.
+scan:
+  scanners:
+    - vuln
+  list-all-pkgs: true
+vulnerability:
+  ignore-unfixed: false
