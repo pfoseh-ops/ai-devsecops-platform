@@ -1,3 +1,5 @@
 # Development and security tools used by CI
 bandit==1.7.5
+# Bandit 1.7.5 imports pbr but does not declare it as a runtime dependency.
+pbr==6.1.1
 # Add additional dev tools here (e.g., safety, pytest-cov)

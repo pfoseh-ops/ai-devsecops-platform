@@ -56,8 +56,10 @@ jobs:
       - name: Run Bandit (output json+txt)
         run: |
           mkdir -p reports
-          bandit -r src -f json -o reports/sast-report.json || true
-          bandit -r src -f txt -o reports/sast-report.txt || true
+          python -m bandit -r src -f json -o reports/sast-report.json --exit-zero
+          python -m bandit -r src -f txt -o reports/sast-report.txt --exit-zero
+          test -s reports/sast-report.json
+          test -s reports/sast-report.txt
       - name: Fail on HIGH+HIGH Bandit findings
         run: |
           python - <<'PY'
@@ -67,8 +69,8 @@ jobs:
 
           path = pathlib.Path("reports/sast-report.json")
           if not path.exists():
-              print("Bandit JSON report missing; skipping hard-fail")
-              sys.exit(0)
+              print("Bandit JSON report missing; SAST scan failed")
+              sys.exit(1)
 
           with path.open(encoding="utf-8") as report:
               data = json.load(report)
@@ -85,10 +87,14 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
       - name: Upload SAST report
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: sast-report
-          path: reports/sast-report.txt
+          path: |
+            reports/sast-report.txt
+            reports/sast-report.json
+          if-no-files-found: error
 
   sca:
     name: SCA - Trivy filesystem
