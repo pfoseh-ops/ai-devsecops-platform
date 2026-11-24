@@ -17,9 +17,9 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install Python dependencies
@@ -32,7 +32,7 @@ jobs:
           set -o pipefail
           pytest -q | tee reports/test-report.txt
       - name: Upload test report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report
           path: reports/test-report.txt
@@ -44,9 +44,9 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install Python dependencies (incl. dev)
@@ -88,7 +88,7 @@ jobs:
           PY
       - name: Upload SAST report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sast-report
           path: |
@@ -100,9 +100,9 @@ jobs:
     name: SCA - Trivy filesystem
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install Python dependencies (for report tooling)
@@ -115,13 +115,13 @@ jobs:
         uses: aquasecurity/trivy-action@v0.12.0
         with:
           scan-type: fs
-          scan-path: "."
+          scan-ref: "."
           output: reports/sca-report.txt
           format: table
         env:
-          TRIVY_SKIP_UPDATE: false
+          TRIVY_SKIP_DB_UPDATE: 'false'
       - name: Upload SCA report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sca-report
           path: reports/sca-report.txt
@@ -133,7 +133,7 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build with Docker Compose
@@ -144,7 +144,7 @@ jobs:
           mkdir -p reports
           echo "Docker build completed" > reports/build-report.txt
       - name: Upload build report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-report
           path: reports/build-report.txt
@@ -157,7 +157,7 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build Docker image
@@ -191,7 +191,7 @@ jobs:
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://ai-devsecops-demo:8000 -r zap-report.html -w zap.md -I || true
       - name: Upload ZAP report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zap-report
           path: reports/zap-report.html
@@ -209,9 +209,9 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install Python dependencies
@@ -219,22 +219,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
       - name: Download test report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: test-report
           path: reports
       - name: Download SAST report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sast-report
           path: reports
       - name: Download SCA report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sca-report
           path: reports
       - name: Download ZAP report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: zap-report
           path: reports
@@ -242,7 +242,7 @@ jobs:
         run: |
           python src/app/generate_report.py
       - name: Upload combined report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: devsecops-report
           path: reports/devsecops-report.md
