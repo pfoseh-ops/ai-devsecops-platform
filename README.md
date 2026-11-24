@@ -1,15 +1,22 @@
-# AI-Powered DevSecOps Starter Platform 🚀
+# AI DevSecOps Starter Platform
 
+A demonstration FastAPI service and DevSecOps validation pipeline with deterministic
+text-risk heuristics, container builds, infrastructure configuration scans and
+consolidated reports. No LLM or external AI service is integrated.
 
+**Production readiness: NO GO.** Five SQLite/OpenSSL CVE dispositions and deployment
+controls remain unresolved. Kubernetes and Terraform files are templates requiring
+environment-specific configuration and review; passing CI does not authorize deployment.
 
-
-A production-style DevSecOps platform demonstrating automated security testing, CI/CD orchestration, containerized application delivery, Infrastructure-as-Code validation, and consolidated security reporting across the software delivery lifecycle.
+Start with [local setup](#local-setup). For release decisions, see the
+[readiness checklist](docs/production-readiness.md) and
+[SQLite/OpenSSL review](docs/sqlite-openssl-dispositions.md).
 
 ## Key Capabilities
 
 - FastAPI application with hardened security headers
-- Dockerized application deployment
-- GitHub Actions CI/CD pipeline
+- Non-root Docker runtime with a pinned base image
+- GitHub Actions validation pipeline; no automated deployment or image publishing
 - Automated unit testing with Pytest
 - SAST scanning with Bandit
 - SCA and IaC scanning with Trivy
@@ -17,9 +24,10 @@ A production-style DevSecOps platform demonstrating automated security testing, 
 - Terraform infrastructure examples
 - Kubernetes deployment manifests
 - Consolidated DevSecOps report generation
-- Automated artifact publishing in GitHub Actions
+- Test and scan report uploads to GitHub Actions artifacts
 
-The platform uses deterministic policy and rule-based scanning by default and can optionally be extended with LLM-powered analysis in future iterations.
+The analyzers provide heuristic indicators, not a complete security scanner,
+semantic understanding of prompts, or a compliance certification.
 
 ## Security Controls
 
@@ -34,56 +42,67 @@ The platform uses deterministic policy and rule-based scanning by default and ca
 
 ## Architecture
 
-```text
-Developer Push
-   ↓
-GitHub Actions CI/CD
-   ↓
-Unit Tests
-   ↓
-SAST (Bandit)
-   ↓
-SCA & IaC Scan (Trivy)
-   ↓
-Docker Build Validation
-   ↓
-DAST (OWASP ZAP)
-   ↓
-Generate Security Reports & Artifacts
-   ↓
-Deploy-ready Kubernetes/Terraform Assets
+```mermaid
+flowchart TD
+    trigger[Pull request or push to main/master] --> tests[Tests, lint and dependency audit]
+    trigger --> sast[Bandit]
+    trigger --> sca[Trivy filesystem scan]
+    trigger --> build[Local image build on CI runner]
+    build --> dast[Temporary app and ZAP baseline scan]
+    tests --> report[Combined report and CI artifacts]
+    sast --> report
+    sca --> report
+    dast --> report
 ```
+
+These jobs validate changes. They do not push container images, apply Kubernetes
+manifests, run Terraform plans/applies, or provision cloud resources.
 
 ---
 
 ## Local Setup
 
+Use Python 3.12, matching CI. Docker with the Compose plugin is needed only for
+the container workflow. Run the following commands from the repository root.
+
 ### 1. Clone repo
 
 ```bash
-git clone https://github.com/pfoseh-ops/ai-devsecops-starter.git
-cd ai-devsecops-starter
+git clone https://github.com/pfoseh-ops/ai-devsecops-platform.git
+cd ai-devsecops-platform
 ```
 
 ### 2. Create Python virtual environment
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Mac/Linux
-# .venv\Scripts\activate    # Windows PowerShell
+source .venv/bin/activate   # macOS/Linux
+```
+
+In Windows PowerShell, activate with:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
 ```
 
 ### 3. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt
 ```
+
+`requirements.txt` includes runtime and test dependencies; `requirements-dev.txt`
+adds lint and security tools. The Docker runtime installs only
+`requirements-runtime.txt`.
 
 ### 4. Run the app
 
 ```bash
-uvicorn src.app.main:app --reload --host 127.0.0.1 --port 8000 --no-access-log
+python -m uvicorn src.app.main:app --reload --host 127.0.0.1 --port 8000 --no-access-log --log-config config/logging.json --no-proxy-headers
 ```
+
+Local mode is anonymous unless `API_KEY` is configured. Use synthetic prompts;
+do not enter live credentials. Reload mode is for development only.
 
 Open:
 
@@ -105,6 +124,9 @@ http://localhost:8000/docs
 docker compose up --build
 ```
 
+Compose uses local mode and binds to `127.0.0.1:8000`. Stop with Ctrl+C and run
+`docker compose down` to remove the local containers/network.
+
 Open:
 
 ```text
@@ -122,12 +144,21 @@ http://localhost:8000/docs
 ## Run Tests
 
 ```bash
-pytest -q
+python -m pytest -q
+python -m ruff check src scripts tests
+python -m bandit -r src scripts
+python -m pip_audit -r requirements.txt -r requirements-dev.txt
 ```
 
-Install `requirements-dev.txt` for `python -m ruff check src tests`,
-`python -m bandit -r src`, and
-`python -m pip_audit -r requirements.txt -r requirements-dev.txt`.
+Bandit currently reports LOW `B404` on the operator helper's subprocess import,
+so the unfiltered local command returns a finding exit status. CI separately gates
+HIGH severity **and** HIGH confidence; that policy is not a production risk acceptance.
+
+The [November 24, 2026 CI run](https://github.com/pfoseh-ops/ai-devsecops-platform/actions/runs/45362760211)
+passed 78 tests, lint, dependency audit, build, Bandit, Trivy, ZAP and report generation.
+ZAP retained one warning type, Non-Storable Content, on two responses; the API
+deliberately sets `Cache-Control: no-store`. These results describe that commit,
+not a guarantee about future builds or production controls.
 
 ## API contract (1.1)
 
@@ -174,12 +205,12 @@ pending security dispositions, and separate deployment/traffic approval checklis
   `/analyze` in every mode. This shared key grants the same capability to every
   holder; user identity, tenant isolation, RBAC, rotation, and revocation policies
   require a gateway/identity-provider decision. Health, root, and API docs remain
-  public; restrict docs at the ingress if required.
+  unauthenticated at the application; restrict their exposure at the gateway.
 - **Kubernetes:** the example references Secret `ai-devsecops-api`, key `api-key`,
   and explicitly enables production mode. Provision that secret outside source
   control using `scripts/sync_api_secret.py` and replace the image marker with a tested
   immutable digest. The sync script is an operator action, not a build/startup hook.
-  The pod uses UID/GID 10001, a read-only root filesystem, runtime-default seccomp,
+  The pod template specifies UID/GID 10001, a read-only root filesystem, runtime-default seccomp,
   and no mounted service-account token. `k8s/namespace.yaml` defines `ai-devsecops`
   with restricted Pod Security Admission. Trivy's built-in rule allows the `ghcr.io`
   registry host; a configuration test additionally requires the exact repository
@@ -209,12 +240,14 @@ pending security dispositions, and separate deployment/traffic approval checklis
   Add dependency-specific readiness checks if storage or model services are added.
 - **Dependencies:** FastAPI/Starlette and Pytest were upgraded after a dependency
   audit identified vulnerable versions. CI runs dependency auditing, lint, unit
-  tests, and Bandit. Transitive packages and the Docker base image are not fully
-  locked; resolve and audit them again for a release, scan the built image, and
+  tests, and Bandit. The Docker base is digest-pinned, but OS updates and transitive
+  Python dependencies still resolve at build time. Audit them again for a release,
+  scan the exact built image, and
   establish an update policy. Passing these checks does not certify security.
-- **Terraform artifact storage:** the artifact bucket now has versioning, SSE-KMS
+- **Terraform artifact storage:** the configuration proposes versioning, SSE-KMS
   with automatic key rotation, HTTPS-only access, disabled ACLs, and access logging
-  to a separate same-account/same-region bucket. Review the procedures below before
+  to a separate same-account/same-region bucket. These are not verified live resources.
+  Review the procedures below before
   applying; no cloud resources or state migrations were performed.
 
 ### Production deployment procedure (not executed)
@@ -275,9 +308,10 @@ Access logs are best-effort and may contain object names, request paths, or othe
 sensitive metadata. Do not encode secrets in object keys or presigned URLs in logs;
 restrict access and use existing CloudTrail audit controls where completeness is required.
 
-Two findings on `aws_s3_bucket.access_logs` are intentionally visible, not globally
-suppressed: `AWS-0089` (do not recursively log the log sink) and `AWS-0132` (SSE-S3
-is required for this direct S3 server-access-log destination). See the
+Two findings remain visible without scanner suppressions: `AWS-0089` on
+`aws_s3_bucket.access_logs` (the log sink is not itself logged) and `AWS-0132` on
+`aws_s3_bucket_server_side_encryption_configuration.access_logs` (the proposed
+direct S3 server-access-log destination uses SSE-S3). See the
 [AWS delivery/encryption requirements](https://docs.aws.amazon.com/AmazonS3/latest/userguide/enable-server-access-logging.html).
 If your organization mandates KMS for all logs, use an approved alternative logging
 pipeline instead of disabling the rule without review. Exceptions require an owner,
@@ -351,6 +385,11 @@ Those systems were not accessed here, so external log privacy remains unverified
 
 ### Local production-review evidence
 
+Raw scan output, image archives, generated manifests, downloaded source snapshots
+and other `reports/` evidence are local-only and excluded from Git. Paths below
+identify review artifacts that are not included in a fresh clone. Sanitized
+conclusions are in `docs/`; CI uploads its own fresh reports as workflow artifacts.
+
 Trivy is pinned to 0.76.2 in CI. Reproduce the source scan with
 `trivy fs --config trivy.yaml --format json --output reports/production-review-final.json .`.
 The configuration excludes deliberately insecure examples, generated reports,
@@ -364,7 +403,7 @@ CloudFront check `AWS-0010` now executes: the unlogged synthetic distribution
 Terraform, so the rule is not applicable to its actual architecture. Fixtures under
 `reports/cloudfront-fixtures` are for scanning only and must never be applied.
 
-`gitleaks git --log-opts=--all --redact` scanned 26 locally available commits and
+An earlier `gitleaks git --log-opts=--all --redact` review scanned 26 then-local commits and
 flagged `hashicorp-tf-password` at `examples/insecure/bad-main.tf:21` in commits
 `50c01ec5b34fd0fbffcc8a0bcac89b554845b652` and
 `11f38303019a6bd679c394093567b90ed0146989`. These are intentionally insecure teaching
@@ -405,9 +444,11 @@ reports/devsecops-report.md
 
 ---
 
-## Demo a Failed Compliance Scan
+## Demonstrate Intentional Scanner Findings
 
-This repo includes intentionally vulnerable examples under `examples/insecure/` for demonstrating DevSecOps scanning, policy enforcement, and remediation workflows.
+This repo includes [deliberately insecure teaching fixtures](examples/insecure/README.md)
+for demonstrating rule findings and remediation workflows. Never apply these files
+to a cluster or cloud account. A failed demo scan is not a compliance assessment.
 
 ```bash
 python -m src.ai_guard.scan --target examples/insecure --output reports/insecure-report.md --fail-on high
@@ -420,6 +461,8 @@ You should see violations such as:
 - Missing CPU/memory limits
 - Image using `latest` tag
 
+The command intentionally exits nonzero when it finds HIGH-or-greater issues.
+
 ---
 
 ## GitHub Actions
@@ -430,16 +473,28 @@ The workflow is located here:
 .github/workflows/devsecops.yml
 ```
 
-It runs:
+It runs on pushes to `main`/`master` and pull requests targeting a branch matched
+by the workflow filter. A feature-branch push alone does not trigger it; a push
+to an open PR also produces a PR synchronization event. The token has
+`contents: read` permissions.
+
+The workflow performs:
 
 1. Python dependency installation
-2. Unit testing
+2. Unit tests, lint and Python dependency auditing
 3. SAST with Bandit
 4. SCA and IaC scanning with Trivy
 5. Docker image build validation
 6. DAST with OWASP ZAP
 7. Consolidated report generation
-8. Artifact publishing
+8. Uploads of test/security reports as GitHub Actions artifacts
+
+The Trivy job scans the **filesystem**, not the built runtime image. Local image
+scanning and SBOM generation are described below; automating them in CI remains
+future work. The Trivy job is report-producing, so success does not mean zero
+findings. ZAP tests a temporary runner-local service and permits warning-level
+findings with `-I`; scan failures are not blanket-ignored. The combined report
+retains **NO GO** even when all validation jobs pass.
 
 ---
 
@@ -447,29 +502,58 @@ It runs:
 
 | Stage | What This Repo Demonstrates |
 |---|---|
-| Plan | Security/compliance rules defined before deployment |
+| Plan | Documented security checks, owner decisions and release blockers |
 | Code | FastAPI app + tests |
 | Build | Docker image build |
 | Secure | Automated scan of Terraform and Kubernetes artifacts |
-| Deploy | Kubernetes deployment/service manifests |
-| Operate | Health endpoint and resource limits |
+| Deploy | Unapplied Kubernetes/Terraform templates; deployment is not automated |
+| Operate | Health endpoint and declared resource limits; live enforcement unverified |
 | Feedback | Markdown report generated for engineers/security teams |
 
 ---
 
-## Future Enhancements
+## Runtime image and review status
 
-Planned improvements:
+The Dockerfile uses a digest-pinned official Python 3.12/Alpine 3.24 base and a
+multistage build. Runtime excludes pip, pytest, HTTPX and rich; the separate
+`test-tools` target exports test dependencies for isolated testing. Native wheels
+are required during the build. Local virtualenv workflows remain unchanged.
 
-- Checkov/tfsec
-- Trivy image scanning
-- SBOM generation with Syft/CycloneDX
-- Argo CD GitOps manifests
-- Automated container publishing to AWS ECR
-- Amazon EKS deployment automation
-- Prometheus/Grafana
-- OPA/Kyverno
-- OpenAI/Azure OpenAI explanation layer
+The [image investigation](docs/image-vulnerability-review.md) records the Debian
+baseline's 222 occurrences and the Alpine rebuild's zero scanner matches. The
+[five-CVE follow-up](docs/sqlite-openssl-dispositions.md) explains why the zero
+result is not a security clearance: SQLite/OpenSSL features remain, fixes were not
+verified in Alpine 3.24, and the tested API paths only establish bounded reachability
+evidence. Production controls and these dispositions remain open: **NO GO**.
+
+For a local image scan, install the project's reviewed Trivy version (0.76.2) and run:
+
+```bash
+python -c "from pathlib import Path; Path('reports').mkdir(exist_ok=True)"
+docker build --pull -t ai-devsecops-review:local .
+docker image save --output reports/runtime-image.tar ai-devsecops-review:local
+trivy image --input reports/runtime-image.tar --scanners vuln,secret --list-all-pkgs --format json --output reports/runtime-image-scan.json
+trivy convert --format cyclonedx --output reports/runtime-image-sbom.cdx.json reports/runtime-image-scan.json
+```
+
+These commands build and scan locally;
+they do not publish an image. Refresh the scanner database and base deliberately,
+record the resulting digest, and review vendor advisories as well as scanner matches.
+Changing a base or dependency can invalidate earlier evidence.
+
+## Potential Future Enhancements
+
+These options are not implemented or approved commitments:
+
+- Automate runtime image scans and CycloneDX SBOM generation in CI; both have been run locally.
+- Evaluate additional IaC analysis if it fills a documented gap in the existing checks.
+- Consider Argo CD, ECR image publishing or EKS deployment automation only after
+  architecture review and separate publication/deployment authorization.
+- Integrate metrics and alerts with the existing observability platform, such as Prometheus/Grafana.
+- Implement and verify admission policies using the platform's chosen policy engine,
+  such as OPA or Kyverno; static manifests do not prove enforcement.
+- Consider an OpenAI/Azure OpenAI explanation layer only after privacy, retention,
+  secret-redaction and data-egress decisions. Prompts may contain sensitive information.
 
 ---
 
@@ -478,14 +562,3 @@ Planned improvements:
 **Paul Foseh**
 
 Senior DevOps & Cloud Engineer | Infrastructure as Code | CI/CD Automation | Kubernetes & Platform Engineering
-
-# Image review follow-up
-
-The [runtime image investigation](docs/image-vulnerability-review.md) records the
-222 baseline occurrences, the smaller Alpine candidate, exact commands and evidence.
-The new scan reports zero matches, but five manual SQLite/OpenSSL HIGH reviews and
-production-control gates remain open: **NO GO**. The Dockerfile uses separate runtime
-and test requirements; `pip install -r requirements.txt` still supports local testing.
-For isolated runtime tests, export the `test-tools` build target and mount it read-only
-as described in the investigation; pytest is intentionally absent from the final image.
-
