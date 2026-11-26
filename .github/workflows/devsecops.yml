@@ -1,5 +1,4 @@
-# DevSecOps pipeline (place this file as .github/workflows/devsecops.yml)
-# This is a copy of the CI workflow for convenience in the repo root.
+# Seven-job validation pipeline: build once, scan and test the same image.
 
 name: DevSecOps Pipeline
 
@@ -31,19 +30,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests
+        id: pytest
         run: |
           mkdir -p reports
           set -o pipefail
           pytest -q | tee reports/test-report.txt
       - name: Lint Python
+        id: lint
         run: python -m ruff check src scripts tests
       - name: Audit Python dependencies
+        id: audit
         run: python -m pip_audit -r requirements.txt -r requirements-dev.txt
+      - name: Record check outcomes
+        if: always()
+        env:
+          CI_STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/record_ci_status.py
       - name: Upload test report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-report
-          path: reports/test-report.txt
+          path: |
+            reports/test-report.txt
+            reports/tests-status.json
+          if-no-files-found: error
 
   sast:
     name: SAST - Bandit
@@ -62,6 +73,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
       - name: Run Bandit (output json+txt)
+        id: scan
         run: |
           mkdir -p reports
           python -m bandit -r src scripts -f json -o reports/sast-report.json --exit-zero
@@ -69,6 +81,7 @@ jobs:
           test -s reports/sast-report.json
           test -s reports/sast-report.txt
       - name: Fail on HIGH+HIGH Bandit findings
+        id: policy
         run: |
           python - <<'PY'
           import json
@@ -94,14 +107,20 @@ jobs:
           )
           sys.exit(1 if bad else 0)
           PY
+      - name: Record check outcomes
+        if: always()
+        env:
+          CI_STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/record_ci_status.py
       - name: Upload SAST report
-        if: ${{ !cancelled() }}
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sast-report
           path: |
             reports/sast-report.txt
             reports/sast-report.json
+            reports/sast-status.json
           if-no-files-found: error
 
   sca:
@@ -120,6 +139,7 @@ jobs:
       - name: Create report directory
         run: mkdir -p reports
       - name: Run Trivy filesystem scan
+        id: scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: v0.76.2
@@ -131,59 +151,91 @@ jobs:
           format: table
         env:
           TRIVY_SKIP_DB_UPDATE: 'false'
+      - name: Record check outcomes
+        if: always()
+        env:
+          CI_STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/record_ci_status.py
       - name: Upload SCA report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sca-report
-          path: reports/sca-report.txt
+          path: |
+            reports/sca-report.txt
+            reports/sca-status.json
+          if-no-files-found: error
 
   build:
-    name: Build
+    name: Build the application and container image
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-      - name: Build with Docker Compose
-        run: |
-          docker compose build --no-cache
-      - name: Save image info
+      - name: Build application image
+        id: build
         run: |
           mkdir -p reports
-          echo "Docker build completed" > reports/build-report.txt
+          set -o pipefail
+          docker build --no-cache -t ai-devsecops-demo:ci . 2>&1 | tee reports/build-report.txt
+      - name: Record and export the built image
+        id: export
+        run: |
+          docker image inspect ai-devsecops-demo:ci --format '{"image_id":"{{.Id}}","os":"{{.Os}}","architecture":"{{.Architecture}}","diff_ids":{{json .RootFS.Layers}}}' > reports/build-image.json
+          docker image save --output reports/runtime-image.tar ai-devsecops-demo:ci
+      - name: Upload built image for downstream jobs
+        id: image_artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: built-image
+          path: |
+            reports/runtime-image.tar
+            reports/build-image.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Record check outcomes
+        if: always()
+        env:
+          CI_STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/record_ci_status.py
       - name: Upload build report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: build-report
-          path: reports/build-report.txt
+          path: |
+            reports/build-report.txt
+            reports/build-image.json
+            reports/build-status.json
+          if-no-files-found: error
 
-  dast:
-    name: Runtime image scan, SBOM and ZAP
+  image_security:
+    name: SBOM generation and image scan
     runs-on: ubuntu-latest
     needs: [build]
-    defaults:
-      run:
-        working-directory: .
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Build Docker image
-        run: |
-          mkdir -p reports
-          docker build -t ai-devsecops-demo:ci .
-      - name: Set up Python for image evidence
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Record and export the runtime image
+      - name: Download built image
+        id: download_image
+        uses: actions/download-artifact@v8
+        with:
+          name: built-image
+          path: reports
+      - name: Load and verify built image
+        id: verify_image
         run: |
+          docker image load --input reports/runtime-image.tar
           docker image inspect ai-devsecops-demo:ci --format '{"image_id":"{{.Id}}","os":"{{.Os}}","architecture":"{{.Architecture}}","diff_ids":{{json .RootFS.Layers}}}' > reports/runtime-image.json
-          docker image save --output reports/runtime-image.tar ai-devsecops-demo:ci
+          python -c "import json; from pathlib import Path; expected=json.loads(Path('reports/build-image.json').read_text()); actual=json.loads(Path('reports/runtime-image.json').read_text()); assert actual == expected, 'Loaded image differs from build'"
       - name: Scan runtime OS and application dependencies
+        id: scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: v0.76.2
@@ -201,19 +253,26 @@ jobs:
         env:
           TRIVY_SKIP_DB_UPDATE: 'false'
       - name: Generate CycloneDX SBOM and image evidence
+        id: sbom
         run: |
           trivy convert --format cyclonedx --scanners vuln --output reports/runtime-image-sbom.cdx.json reports/runtime-image-scan.json
           trivy --version > reports/runtime-trivy-version.txt
           cp .cache/trivy/db/metadata.json reports/runtime-trivy-db.json
           python scripts/summarize_image_scan.py --reports reports
           cat reports/runtime-image-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Record check outcomes
+        if: always()
+        env:
+          CI_STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/record_ci_status.py
       - name: Upload runtime image reports (no image archive)
-        if: ${{ !cancelled() }}
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: runtime-image-security
           path: |
             reports/runtime-image.json
+            reports/image_security-status.json
             reports/runtime-image-scan.json
             reports/runtime-image-sbom.cdx.json
             reports/runtime-image-summary.json
@@ -222,13 +281,43 @@ jobs:
             reports/runtime-trivy-db.json
           if-no-files-found: error
           retention-days: 14
+
+  dast:
+    name: DAST - OWASP ZAP
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Download built image
+        id: download_image
+        uses: actions/download-artifact@v8
+        with:
+          name: built-image
+          path: reports
+      - name: Load and verify built image
+        id: verify_image
+        run: |
+          docker image load --input reports/runtime-image.tar
+          docker image inspect ai-devsecops-demo:ci --format '{"image_id":"{{.Id}}","os":"{{.Os}}","architecture":"{{.Architecture}}","diff_ids":{{json .RootFS.Layers}}}' > reports/dast-image.json
+          python -c "import json; from pathlib import Path; expected=json.loads(Path('reports/build-image.json').read_text()); actual=json.loads(Path('reports/dast-image.json').read_text()); assert actual == expected, 'Loaded image differs from build'"
       - name: Create docker network
+        id: network
         run: |
           docker network create zapnet || true
       - name: Run app container on zapnet (published to localhost:8000)
+        id: start_app
         run: |
           docker run -d --name ai-devsecops-demo --network zapnet -p 127.0.0.1:8000:8000 ai-devsecops-demo:ci
+      - name: Verify running container image
+        id: verify_container
+        run: |
+          docker inspect ai-devsecops-demo --format '{{.Image}}' > reports/dast-container-image.txt
+          python -c "import json; from pathlib import Path; expected=json.loads(Path('reports/dast-image.json').read_text())['image_id']; assert Path('reports/dast-container-image.txt').read_text().strip() == expected, 'Running container differs from build'"
       - name: Wait for health endpoint (localhost)
+        id: health
         run: |
           for i in {1..30}; do
             if curl -sSf http://localhost:8000/health -o /dev/null; then
@@ -240,6 +329,7 @@ jobs:
           echo "App health check failed" >&2
           exit 1
       - name: Run OWASP ZAP (container on zapnet)
+        id: zap
         run: |
           mkdir -p reports
           docker run --rm \
@@ -247,13 +337,24 @@ jobs:
             --network zapnet \
             -v ${{ github.workspace }}/reports:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://ai-devsecops-demo:8000 -r zap-report.html -w zap.md -I
+            zap-baseline.py -t http://ai-devsecops-demo:8000 -r zap-report.html -w zap.md -J zap-report.json -I
+      - name: Record check outcomes
+        if: always()
+        env:
+          CI_STEPS_JSON: ${{ toJSON(steps) }}
+        run: python scripts/record_ci_status.py
       - name: Upload ZAP report
-        if: ${{ !cancelled() }}
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: zap-report
-          path: reports/zap-report.html
+          path: |
+            reports/zap-report.html
+            reports/zap-report.json
+            reports/zap.md
+            reports/dast-image.json
+            reports/dast-container-image.txt
+            reports/dast-status.json
           if-no-files-found: error
       - name: Stop app and remove network
         if: always()
@@ -264,7 +365,8 @@ jobs:
   report:
     name: Generate combined report
     runs-on: ubuntu-latest
-    needs: [tests, sca, sast, dast]
+    needs: [tests, sast, sca, build, image_security, dast]
+    if: ${{ always() }}
     defaults:
       run:
         working-directory: .
@@ -274,40 +376,59 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
       - name: Download test report
+        id: download_tests
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: test-report
           path: reports
       - name: Download SAST report
+        id: download_sast
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: sast-report
           path: reports
       - name: Download SCA report
+        id: download_sca
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: sca-report
           path: reports
       - name: Download ZAP report
+        id: download_dast
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: zap-report
           path: reports
       - name: Download runtime image evidence
+        id: download_image_security
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: runtime-image-security
           path: reports
+      - name: Download build evidence
+        id: download_build
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: build-report
+          path: reports
       - name: Generate combined report
+        env:
+          CI_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_DOWNLOADS_JSON: ${{ toJSON(steps) }}
         run: |
           python src/app/generate_report.py
+          cat reports/devsecops-report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload combined report
         uses: actions/upload-artifact@v7
         with:
           name: devsecops-report
-          path: reports/devsecops-report.md
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14

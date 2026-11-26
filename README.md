@@ -48,11 +48,13 @@ flowchart TD
     trigger --> sast[Bandit]
     trigger --> sca[Trivy filesystem scan]
     trigger --> build[Local image build on CI runner]
-    build --> image[Build ZAP runtime image, Trivy image scan and CycloneDX SBOM]
-    image --> dast[Temporary scanned app and ZAP baseline scan]
+    build --> image[Trivy image scan and CycloneDX SBOM]
+    build --> dast[Same built image in temporary app and ZAP baseline scan]
     tests --> report[Combined report and CI artifacts]
     sast --> report
     sca --> report
+    build --> report
+    image --> report
     dast --> report
 ```
 
@@ -481,25 +483,43 @@ to an open PR also produces a PR synchronization event. The token has
 
 The workflow performs:
 
-1. Python dependency installation
-2. Unit tests, lint and Python dependency auditing
-3. SAST with Bandit
-4. SCA and IaC scanning with Trivy
-5. Docker image build validation
-6. Runtime image vulnerability scanning, CycloneDX SBOM generation and DAST with OWASP ZAP
-7. Consolidated report generation
-8. Uploads of test/security reports as GitHub Actions artifacts
+1. Unit tests, lint and Python dependency auditing (`tests`)
+2. SAST with Bandit (`sast`)
+3. SCA and IaC scanning with Trivy (`sca`)
+4. Build the application and container image once (`build`)
+5. Generate a CycloneDX SBOM and scan the built image with Trivy (`image_security`)
+6. DAST with the existing OWASP ZAP baseline scan (`dast`)
+7. Generate a combined report (`report`)
 
-The SCA job scans the **filesystem**. The runtime/ZAP job additionally scans the
+The first four jobs run independently. Image security and DAST each depend only
+on a successful build, and can run in parallel. An image scan failure does not
+prevent ZAP from running. A build failure skips both downstream jobs.
+
+The report waits for all six preceding jobs with `if: always()`. It separates
+GitHub job outcomes (success/failure/skipped/cancelled), individual check outcomes,
+artifact download failures, missing evidence, and security findings. Available
+reports and step outcomes are uploaded even after check failures; validation jobs
+remain failed. Only artifact downloads in the aggregation job are best effort.
+The `devsecops-report` artifact bundles the Markdown report, ZAP HTML/JSON/Markdown,
+and available evidence, including job/download metadata. No application dependencies
+are installed to generate the combined report.
+
+The SCA job scans the **filesystem**. The image security job additionally scans the
 exact final image archive with Trivy 0.76.2 and converts that result into a CycloneDX
-SBOM before starting the same image for ZAP. It verifies the scanned layer list and
+SBOM. Independently, DAST starts the same built image for ZAP. Image security verifies the scanned layer list and
 platform against the built image and records the source commit, image/configuration
 identities, database timestamps, package inventory, occurrence/unique-ID counts and
 evidence hashes. Missing or inconsistent evidence and scanner/tool failures fail CI.
 
 Download `runtime-image-security` from the workflow's artifacts for the JSON scan,
 CycloneDX SBOM, identity, summary and scanner/database metadata (14-day retention).
-The image archive is not uploaded and no image is pushed to a registry. The summary
+The `built-image` artifact contains the image archive and build identity with one-day
+retention; no image is pushed to a registry. Both consumers load that archive and
+verify image identity, platform and layers against `build-image.json`. They record
+`runtime-image.json` and `dast-image.json`; DAST also verifies and records the running
+container's image in `dast-container-image.txt`. The combined report compares these
+identities. Archive transfer adds storage/download overhead; rerunning consumers
+after artifact expiry requires rebuilding. The summary
 also appears in the job summary and combined report. The runtime scan covers OS
 and application dependency vulnerabilities; repository secret scanning remains in
 the filesystem job. Neither scan replaces manual advisory review.
@@ -509,6 +529,11 @@ production approval; unfixed findings and all severities remain included.
 ZAP tests a temporary runner-local service and permits warning-level
 findings with `-I`; scan failures are not blanket-ignored. The combined report
 retains **NO GO** even when all validation jobs pass.
+
+Aggregation is best effort if runners fail or the workflow is forcibly stopped.
+Review branch-protection required checks when adopting the renamed Build/DAST jobs
+and the new image-security job; report success alone does not establish that all
+checks passed. ZAP baseline remains passive, with its existing coverage limitations.
 
 ---
 
